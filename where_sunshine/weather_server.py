@@ -1,18 +1,19 @@
 from typing import Optional, Dict, Union
+from .utils import format_date
 from datetime import datetime
 
 
-class WeatherService:
-    r"""Weather forecast service powered by QWeather API.
+class WeatherServer:
+    r"""Weather forecast server powered by QWeather API.
 
-    To use, you could provide your API key with 
-    `shell: export QWEATHER_API_KEY=xxx` or 
+    To use, you could provide your API key with
+    `shell: export QWEATHER_API_KEY=xxx` or
     `code: zhipuai.api_key=xxx` or
-    `code: WeatherService(api_key=xxx)`
+    `code: WeatherServer(api_key=xxx)`
 
     Example: To fetch weather forecast:
         .. code-block:: python
-            weather = WeatherService(api_key=xxx)
+            weather = WeatherServer(api_key=xxx)
             result = weather("北京")
             # result = weather("北京市", date=4)
             # result = weather("beijing", date="20240623")
@@ -92,7 +93,8 @@ class WeatherService:
         result = self.daily_weather_client.invoke(
             location=location_id, days=f"{normalize_days(date)}d", lang=self.lang, unit=self.unit
         )
-        result = [
+        response = {} 
+        response["daily"] = [
             {
                 "date": item["fxDate"],
                 "tempMax": item["tempMax"],
@@ -101,10 +103,11 @@ class WeatherService:
             }
             for item in result["daily"]
         ]
-        result = extract_days_response(result, date)
-        result.update({"location": location_name})
-        return result
-    
+        response["link"] = result["fxLink"]
+        response["daily"] = extract_days_response(response["daily"], date)
+        response.update({"location": location_name})
+        return response
+
     def _get_city_id_name(self, location, adm):
         resp = self.city_lookup_client.invoke(
             location=location, adm=adm, scope=self.scope, lang=self.lang
@@ -117,22 +120,8 @@ class WeatherService:
 
 def normalize_days(date):
     current_date = datetime.now().date()
-
-    if isinstance(date, int):
-        # Case 1: Input is an integer representing the number of days
-        delta_days = date
-
-    elif isinstance(date, str):
-        # Case 2: Input is a specific date in YYYYMMDD format or a range YYYYMMDD-YYYYMMDD
-        if "-" in date:
-            # Range of dates
-            end_date_str = date.split("-")[-1]
-            end_date = datetime.strptime(end_date_str, "%Y%m%d").date()
-            delta_days = (end_date - current_date).days + 1
-        else:
-            # Single date
-            target_date = datetime.strptime(date, "%Y%m%d").date()
-            delta_days = (target_date - current_date).days
+    date = format_date(date)
+    delta_days = (date[-1] - current_date).days + 1
 
     closest_days = [3, 7, 10, 15, 30]
     for days in closest_days:
@@ -143,31 +132,10 @@ def normalize_days(date):
 
 
 def extract_days_response(daily_weather, date):
+    dates = format_date(date)
     result = []
-
-    if isinstance(date, int):
-        # Case 1: Input is an integer representing the number of days
-        result = daily_weather[:date]
-
-    elif isinstance(date, str):
-        # Case 2: Input is a specific date in YYYYMMDD format or a range YYYYMMDD-YYYYMMDD
-        if "-" in date:
-            # Range of dates
-            start_date_str, end_date_str = date.split("-")
-            start_date = datetime.strptime(start_date_str, "%Y%m%d").date()
-            end_date = datetime.strptime(end_date_str, "%Y%m%d").date()
-
-            for day_weather in daily_weather:
-                date_str = day_weather.get("date")
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                if start_date <= date_obj <= end_date:
-                    result.append(day_weather)
-        else:
-            # Single date
-            target_date = datetime.strptime(date, "%Y%m%d").date()
-            for day_weather in daily_weather:
-                date_str = day_weather.get("date")
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                if date_obj == target_date:
-                    result.append(day_weather)
-    return {"daily": result}
+    for day_weather in daily_weather:
+        date_obj = datetime.strptime(day_weather["date"], "%Y-%m-%d").date()
+        if date_obj in dates:
+            result.append(day_weather)
+    return result

@@ -1,3 +1,3 @@
-from .sunshine_finder import SunshineFinder
+from .sunshine_finder import SunshineFinder as sunshine_finder
 
-__all__ = ["SunshineFinder"]
+__all__ = ["sunshine_finder"]
